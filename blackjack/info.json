@@ -1,6 +1,7 @@
 {
     "AUTHOR" : "omnifarius",
-    "DESCRIPTION" : "This cog will allow users to play blackjack against the bot!",
-    "DISABLED" : false,
-    "NAME" : "Play Blackjack"
+    "SHORT" : "Play blackjack!",
+    "DESCRIPTION" : "Play blackjack against the bot!",
+    "NAME" : "Blackjack",
+    "INSTALL_MSG" : "Thanks for installing blackjack!"
 }
