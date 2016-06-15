@@ -35,7 +35,7 @@ def check_folders():
         os.makedirs("data/challonge")
 
 def check_files():
-    settings = {"username" : "LoonyBot", "api_key" : "aQxII221PTVdHlsiYYEzvm2kYoNR8MMkOgplZni4"}
+    settings = {"username" : "bot", "api_key" : ""}
 
     f = "data/challonge/settings.json"
     if not fileIO(f, "check"):
