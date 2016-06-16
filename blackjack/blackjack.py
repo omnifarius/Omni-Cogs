@@ -147,6 +147,7 @@ class Blackjack:
             await self.bot.say("There's no blackjack table started in this channel.")
 
     @_blackjack.command(pass_context=True)
+    @checks.mod_or_permissions(manage_server=True)
     async def sessions(self):
         """Displays the number of sessions"""
         sessions = len(self.bj_sessions)
@@ -154,7 +155,6 @@ class Blackjack:
         channels = []
         for sess in self.bj_sessions:
             channels.append(str(sess.channel))
-        print(channels)
 
 
     @_blackjack.command(pass_context=True, no_pm=True)
@@ -266,10 +266,8 @@ class Blackjack:
             return
 
         if await get_bj_by_channel(message.channel):
-            #print("Active blackjack table found.")
             session = await get_bj_by_channel(message.channel)
         else:
-            #print("Starting new blackjack table.")
             session = BlackjackSession(message, self.settings)
             self.bj_sessions.append(session)
         
@@ -283,7 +281,6 @@ class Blackjack:
         else:
             if seat not in session.bjtable.keys():
                 session.bjtable[seat] = author
-                #print("Seated player {0} at position {1}.".format(author.name, str(seat)))
                 await self.bot.say("Seated player {0} at position {1}.".format(author.name, str(seat)))
                 doneSeating = True
             else:
@@ -292,14 +289,10 @@ class Blackjack:
                     if newseat not in session.bjtable.keys():
                         session.bjtable[newseat] = author
                         doneSeating = True
-                        #print("Seated {0} at position {1}.".format(author.name, str(newseat)))
                         await self.bot.say("Seated player {0} at position {1}.".format(author.name, str(newseat)))
                     newseat += 1
             if not doneSeating:
-                #print("No seats were left, I guess!")
                 await self.bot.say("Sorry, no more seats available!  Wait until one opens up!")
-        #print(session.bjtable)
-        #print("---Done Seating---")
         if not session.active and doneSeating: await session.dealer_waiting()
 
     @commands.command(pass_context=True, no_pm=True)
@@ -309,24 +302,18 @@ class Blackjack:
         message = ctx.message
         author = message.author
         if await get_bj_by_channel(message.channel):
-            #print("Active blackjack table found.")
             session = await get_bj_by_channel(message.channel)
             if author in session.bjtable.values():
                 for seat in session.bjtable:
                     if session.bjtable[seat] == author:
                         removeseat = seat
                 await self.bot.say("Thanks for playing.  Come back again soon, {}".format(author.name))
-                #print("Removed {} from the table!".format(author.name))
                 tempplayer = session.bjtable.pop(removeseat)
-                #print(tempplayer)
-                #print(session.bjtable)
                 if len(session.bjtable) == 0:  session.stop = True
             else: 
                 await self.bot.say("Sorry, {}, but you're not sitting at a table.".format(author.name))
-                #print("{} isn't at an active table in this channel.".format(author.name))
         else:
             await self.bot.say("Sorry, but there's no blackjack table started, let alone one to stand up from.  Why don't you !sit down and start one.")
-            #print("{} tried to get up from nonexistent blackjack table.".format(author.name))
 
     def account_check(self, id):
         if id in self.bank:
@@ -425,8 +412,8 @@ class BlackjackSession():
         if message.author in self.bjtable.values():
             if "bet" in message.content.lower():
                 await self.do_bet(message)
-            if "bug" in message.content.lower():
-                print("**** Someone mentioned a BUG *****")
+            #if "bug" in message.content.lower():
+            #    print("**** Someone mentioned a BUG *****")
         if message.author == self.activeUser:
             for com in self.commands:
                 if com in message.content.lower():
@@ -439,11 +426,9 @@ class BlackjackSession():
                     if com == "surrender":  self.status = "surrendering"
                     return True
         #add a "confused" status if more than one command present
-        #print(message.content)
 
     async def do_bet(self, message):
         """Establish a bet on the table"""
-        #print("An active player said BET so let's check...")
         author = message.author
         channel = message.channel
         
@@ -453,9 +438,7 @@ class BlackjackSession():
         else: 
             if message.content == "bet" and author in self.lastbets.keys():
                     bet = self.lastbets[author]  #repeat previous
-                    #print("repeat bet for {}".format(author.name))
             else:
-                #print("false alarm bet match")
                 return
         
         if not bj_manager.account_check(author.id):
@@ -484,11 +467,9 @@ class BlackjackSession():
         while not self.stop and abs(self.timer - int(time.perf_counter())) <= self.settings["ACTIVE_TIMEOUT"]:
             if self.dealerReady: await bj_manager.bot.say("Dealer Ready!  Place your bets now please.")
             self.dealerReady = False
-            print(self.status + "... ACTIVE timer: " + str(abs(self.timer - int(time.perf_counter()))))
             await asyncio.sleep(1)
             if self.status == "active bets":
                 self.status == "dealing"
-                print("Bets found, let's start bet cooldown timer")
                 self.bettimer = int(time.perf_counter())
                 self.betReady = True
                 while abs(self.bettimer - int(time.perf_counter())) <= self.settings["BET_TIMEOUT"]:
@@ -496,27 +477,20 @@ class BlackjackSession():
                         endtime = self.settings["BET_TIMEOUT"] - abs(self.bettimer - int(time.perf_counter()))
                         await bj_manager.bot.say("Betting ends in {} seconds".format(str(endtime)))
                         self.betReady = False
-                    print(self.status + "... BET timer: " + str(abs(self.bettimer - int(time.perf_counter()))))
                     await asyncio.sleep(1)
-                print("Cooldown complete, let's play!!")
                 await self.init_deal()
             elif self.stop:
                 await self.stop_bj()
-        print("Escaped the dealer_waiting while loop")
         if not self.stop:
-            print("TIMEOUT reached, stopping...")
             await bj_manager.bot.say("Sorry, you took too long to bet!  Closing table.")
             await self.stop_bj()
         
     async def active_dealer(self, splitindex):
         """Bulk of the while loop for the active dealer loop"""
-        print(self.status + " --- " + self.activeUser.name + "'s turn --- index: " + str(splitindex) + " splits: " + str(self.splitcount))
-        print(self.hands[self.activeUser][splitindex])
         self.timer = int(time.perf_counter()) #reset timer
         if self.hands[self.activeUser][splitindex].isBlackjack:
             self.hands[self.activeUser][splitindex].bet *= 2
             await bj_manager.bot.say("BLACKJACK!  Congrats, {}.".format(self.activeUser.mention))  
-            print("BLACKJACK for " + self.activeUser.name)
             self.pbjcount += 1
             self.blackjacks.append(self.activeUser)
             self.timer -= self.settings["ACTIVE_DELAY"] #unnecessary?
@@ -528,15 +502,12 @@ class BlackjackSession():
                     await bj_manager.bot.say("{} timed out.".format(self.activeUser.name))
                     self.status = "standing"
                 if self.status == "hitting":
-                    print("HITTING in the active_dealer loop")
                     await self.do_hit(splitindex)
                 elif self.status == "standing":
-                    print("STANDING in the active_dealer loop")
                     await bj_manager.bot.say("{} stands.".format(self.activeUser.name))
                     self.timer -= self.settings["ACTIVE_DELAY"]
                     self.status = "dealing"
                 elif self.status == "doubling":
-                    print("DOUBLING in the active_dealer loop")
                     if len(self.hands[self.activeUser][splitindex]) == 2:
                         if bj_manager.enough_money(self.activeUser.id, self.bets[self.activeUser]*2):
                             self.hands[self.activeUser][splitindex].bet *= 2
@@ -548,7 +519,6 @@ class BlackjackSession():
                         await bj_manager.bot.say("Sorry, but you can only double down on your initial two card hand.  Try hitting.")
                     self.status = "dealing"
                 elif self.status == "splitting":
-                    print("SPLITTING in active_dealer loop")
                     if self.hands[self.activeUser][splitindex].isSplittable():
                         if bj_manager.enough_money(self.activeUser.id, self.hands[self.activeUser][splitindex].bet*2):
                             await self.do_split(splitindex)
@@ -559,7 +529,6 @@ class BlackjackSession():
                         await bj_manager.bot.say("Sorry, but that is not a splittable hand!")
                     self.status = "dealing"
                 elif self.status == "surrendering":
-                    print("SURRENDERING in active_dealer loop")
                     if len(self.hands[self.activeUser][splitindex]) == 2:
                         await bj_manager.bot.say("{} surrenders and gets half their bet back.".format(self.activeUser.name))
                         self.hands[self.activeUser][splitindex] *= -0.5
@@ -567,21 +536,17 @@ class BlackjackSession():
                     else:
                         await bj_manager.bot.say("Sorry, but you can only surrender your initial hand.")
                     self.status = "dealing"
-                print(self.status + "... DELAY timer: " + str(abs(self.timer - int(time.perf_counter()))) + "... index: " + str(splitindex) + " splits: " + str(self.splitcount))
                 await asyncio.sleep(1)
-        print("Escaped the active dealer loop with status: " + self.status)
         self.status = "dealing"
         
     async def do_hit(self, splitindex):
         """Hit function for players"""
-        print("{} is hitting".format(self.activeUser.name))
         self.shoe.move_cards(self.hands[self.activeUser][splitindex], 1)
         await bj_manager.bot.say(self.hands[self.activeUser][splitindex])
         self.timer = int(time.perf_counter())
         self.status = "dealing"
         if self.hands[self.activeUser][splitindex].bjhighval > 21:
             await bj_manager.bot.say("{0} busted with {1}".format(self.activeUser.name, str(self.hands[self.activeUser][splitindex].bjhighval)))
-            print("{0} busted with {1}".format(self.activeUser.name, str(self.hands[self.activeUser][splitindex].bjhighval)))
             self.hands[self.activeUser][splitindex].bet *= -1
             self.timer -= self.settings["ACTIVE_DELAY"]
         elif self.hands[self.activeUser][splitindex].bjhighval == 21:
@@ -590,7 +555,6 @@ class BlackjackSession():
     async def do_split(self, splitindex):
         """Split function for players"""
         self.splitcount += 1
-        print(self.hands[self.activeUser][splitindex])
         self.status = "dealing"
         h1 = Hand(self.activeUser, False, self.hands[self.activeUser][splitindex].bet)
         h2 = Hand(self.activeUser, False, self.hands[self.activeUser][splitindex].bet)
@@ -600,8 +564,6 @@ class BlackjackSession():
         self.shoe.move_cards(h2, 1)
         self.hands[self.activeUser][splitindex] = h1
         self.hands[self.activeUser].append(h2)
-        print(self.hands[self.activeUser][splitindex])
-        print(self.hands[self.activeUser][self.splitcount])
         await bj_manager.bot.say(self.dealerhand)
         await bj_manager.bot.say(self.hands[self.activeUser][self.splitcount])
         await self.active_dealer(self.splitcount)
@@ -620,47 +582,34 @@ class BlackjackSession():
             for hand in self.hands[player]:
                 if hand.bet > 0:
                     activehands += 1
-        print("Finishing deal.  Hands with active bets: " + str(activehands))
         activehands -= len(self.blackjacks)
-        #need to change how this blackjack thing is dealt with!!!
-        print("Finishing deal.  Hands after removing blackjacks: " + str(activehands))
+        #should change how this blackjack thing is dealt with!!!
         if activehands > 0:
-            print("Process Dealer's hand since there are still active hands on table")
             suspensetimer = int(time.perf_counter())
             while self.dealerhand.bjhighval < 21 and abs(suspensetimer - int(time.perf_counter())) <= 20:
-                #print(self.status + "... Timer: " + str(abs(suspensetimer - int(time.perf_counter()))))                
                 await asyncio.sleep(2) #Waiting for suspense!
                 if self.dealerhand.bjhighval >= 17 and self.dealerhand.bjhighval <= 21:
-                    print("Dealer stands at " + str(self.dealerhand.bjhighval))
                     await bj_manager.bot.say("Dealer stands at " + str(self.dealerhand.bjhighval))
                     suspensetimer -= 20
                 if self.dealerhand.bjhighval < 17:
-                    print("Dealer hits")
                     await bj_manager.bot.say("Dealer hits.")
                     self.shoe.move_cards(self.dealerhand, 1)
                     await bj_manager.bot.say(self.dealerhand)
             if self.dealerhand.bjhighval > 21:
                 await bj_manager.bot.say("Dealer busts with " + str(self.dealerhand.bjhighval) + ".  Everyone's a winner!  Unless you busted already, sucker.")
-                print("Dealer BUST, everyone remaining wins!")
             else:
                 for player in self.hands: #check who won!
                     for hand in self.hands[player]:  
-                        #print("checking player hand for: {}".format(player.name))
                         if hand.bet > 0:
                             if self.dealerhand.bjhighval > hand.bjhighval:
-                                print("LOSER: " + str(player.name))
                                 await bj_manager.bot.say("Sorry, {0}, but you lost with {1}!".format(player.mention, str(hand.bjhighval)))
                                 hand.bet *= -1
                             if hand.bjhighval > self.dealerhand.bjhighval:
-                                print("WINNER: " + str(player.name))
                                 await bj_manager.bot.say("Congrats, {0}, you win with {1}!".format(player.mention, str(hand.bjhighval)))
                             if self.dealerhand.bjhighval == hand.bjhighval:
-                                print("PUSH for " + str(player.name))
                                 await bj_manager.bot.say("Push at {1}, take back your bet, {0}".format(player.mention, str(hand.bjhighval)))
                                 hand.bet = 0
-                #print("No more bets to check...")
         else:
-            print("Skipped processing since no players left to compare")
             if len(self.blackjacks) == 0:
                 await bj_manager.bot.say("Sorry table, looks like the house won this round!")
             else:
@@ -670,7 +619,6 @@ class BlackjackSession():
 
     async def reset_dealer(self):
         """Reset globals and start fresh!"""
-        print("===== Resetting to defaults =====")
         self.count += 1 #hands played per session
         self.activeUser = None
         self.hands = {}
@@ -691,7 +639,6 @@ class BlackjackSession():
         self.shoe.shuffle()
         await bj_manager.bot.say("Shuffling and dealing...")
         for player in self.bets:
-            print("active bet: " + player.name + str(self.bets[player]))
             playerhand = Hand(player, False, self.bets[player])
             self.shoe.move_cards(playerhand, 2)
             self.hands[player] = [playerhand]
@@ -702,7 +649,6 @@ class BlackjackSession():
             await bj_manager.bot.say(self.hands[player][0])
         #check for dealer BJ ... offer insurance here eventually?
         if self.dealerhand.isBlackjack:
-            print("Dealer Blackjack!!!")
             self.dbjcount += 1
             await bj_manager.bot.say("Dealer Blackjack!!!")
             self.dealerhand.isDealer = False
@@ -719,7 +665,6 @@ class BlackjackSession():
             self.status = "dealing"
             firstPlayer = True
             for player in self.hands.keys():
-                print(player.name + " in init_deal")
                 if not firstPlayer:
                     await bj_manager.bot.say(self.dealerhand)
                     await bj_manager.bot.say(self.hands[player][0])
@@ -732,24 +677,20 @@ class BlackjackSession():
 
     async def analyze_bets(self):
         """Finalize bets and adjust the blackjack bank!"""
-        print("Analyzing bets!")
         for player in self.hands:
             for hand in self.hands[player]: 
-                print("Player: {0}, Bet: {1}".format(player.name, str(hand.bet)))
                 if hand.bet != 0:
                     bj_manager.add_money(player.id, hand.bet)
                 await bj_manager.bot.say("{0}, your new blackjack balance is: {1}".format(player.mention, str(bj_manager.check_balance(player.id))))
         await self.reset_dealer()
 
     async def stop_bj(self):
-        print("Ending blackjack session gracefully...")
         output = "Blackjack ended.\nSession Stats:\nHands played: "
         output += str(self.count)
         output += "\nPlayer blackjacks:"
         output += str(self.pbjcount)
         output += "\nDealer blackjacks:"
         output += str(self.dbjcount)
-        print(output)
         await bj_manager.bot.change_status(None)
         await bj_manager.bot.say(output)
         bj_manager.bj_sessions.remove(self)
@@ -768,7 +709,7 @@ async def check_messages(message):
 
 def check_folders():
     if not os.path.exists("data/blackjack"):
-        print("Creating data/blackjack folder...")
+        logger.info("Creating data/blackjack folder...")
         os.makedirs("data/blackjack")
 
 def check_files():
@@ -776,7 +717,7 @@ def check_files():
 
     f = "data/blackjack/settings.json"
     if not fileIO(f, "check"):
-        print("Creating default blackjack's settings.json...")
+        logger.info("Creating default blackjack's settings.json...")
         fileIO(f, "save", settings)
     else: #consistency check
         current = fileIO(f, "load")
@@ -784,12 +725,12 @@ def check_files():
             for key in settings.keys():
                 if key not in current.keys():
                     current[key] = settings[key]
-                    print("Adding " + str(key) + " field to economy settings.json")
+                    logger.info("Adding " + str(key) + " field to economy settings.json")
             fileIO(f, "save", current)
 
     f = "data/blackjack/bank.json"
     if not fileIO(f, "check"):
-        print("Creating empty bank.json...")
+        logger.info("Creating empty bank.json...")
         fileIO(f, "save", {})
 
 def setup(bot):
@@ -945,7 +886,6 @@ class Hand(Deck):
             if hideFirst:
                 output += ":question: :question: "
                 hideFirst = False
-                print("Hidden rank = " + str(card.rank))
             else:
                 if card.rank > 10: showing_val += 10
                 else: showing_val += card.rank
@@ -989,15 +929,11 @@ class Hand(Deck):
         """Returns True if hand can be split
            Two card hands only
            Rank must be equal"""
-        print("Checking for splittable hand")
         if len(self.cards) != 2:  
-            print("Sorry, only two card hands")
             return False
         else:
-            print("{0} and {1}".format(self.cards[0].rank, self.cards[1].rank))
             if self.cards[0].rank == self.cards[1].rank:  return True
             elif self.cards[0].rank >= 10 and self.cards[1].rank >= 10: return True
-        print("Sorry, guess the ranks didn't match")
         return False
 
 
