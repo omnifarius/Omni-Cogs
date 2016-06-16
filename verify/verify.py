@@ -22,8 +22,7 @@ class Verify:
             user = author
 
         if role is None:
-            await self.bot.say('Seomthing went wrong.  The "Verified" role cannot be fou
-nd.')
+            await self.bot.say('Something went wrong.  The "Verified" role cannot be found.')
             return
 
         if not channel.permissions_for(server.me).manage_roles:
