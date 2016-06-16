@@ -1,0 +1,7 @@
+{
+    "AUTHOR" : "omnifarius",
+    "SHORT" : "Add Verified role to user",
+    "DESCRIPTION" : "Allows any user to add Verified role to themselves",
+    "NAME" : "Verify",
+    "INSTALL_MSG" : "Thanks for installing verify!"
+}
