@@ -709,7 +709,7 @@ async def check_messages(message):
 
 def check_folders():
     if not os.path.exists("data/blackjack"):
-        logger.info("Creating data/blackjack folder...")
+        print("Creating data/blackjack folder...")
         os.makedirs("data/blackjack")
 
 def check_files():
@@ -717,7 +717,7 @@ def check_files():
 
     f = "data/blackjack/settings.json"
     if not fileIO(f, "check"):
-        logger.info("Creating default blackjack's settings.json...")
+        print("Creating default blackjack settings.json...")
         fileIO(f, "save", settings)
     else: #consistency check
         current = fileIO(f, "load")
@@ -725,12 +725,12 @@ def check_files():
             for key in settings.keys():
                 if key not in current.keys():
                     current[key] = settings[key]
-                    logger.info("Adding " + str(key) + " field to economy settings.json")
+                    print("Adding " + str(key) + " field to blackjack settings.json")
             fileIO(f, "save", current)
 
     f = "data/blackjack/bank.json"
     if not fileIO(f, "check"):
-        logger.info("Creating empty bank.json...")
+        print("Creating empty blackjack bank.json...")
         fileIO(f, "save", {})
 
 def setup(bot):
