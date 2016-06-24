@@ -20,9 +20,13 @@ class Blackjack:
     def __init__(self, bot):
         self.bot = bot
         self.settings = fileIO("data/blackjack/settings.json", "load") 
-        self.bank = fileIO("data/blackjack/bank.json", "load")
         self.bj_sessions = []
         self.payday_register = {}
+        economy_cog = self.bot.get_cog("Economy")
+        if economy_cog is None:
+            print("Sorry, but blackjack relies on the economy cog.  Please ensure economy is loaded before loading blackjack.")
+        else:
+            self.bank = economy_cog.bank
 
     @commands.group(pass_context=True)
     @checks.mod_or_permissions(manage_server=True)
@@ -94,20 +98,6 @@ class Blackjack:
         await self.bot.say("Maximum blackjack bet is now: " + str(self.settings["MAX_BET"]))
         fileIO("data/blackjack/settings.json", "save", self.settings)
 
-    @blackjackset.command(name="paydaytime", pass_context=True)
-    async def paydaytime(self, seconds : int):
-        """Seconds between each payday"""
-        self.settings["PAYDAY_TIME"] = seconds
-        await self.bot.say("Value modified. At least " + str(seconds) + " seconds must pass between each payday.")
-        fileIO("data/blackjack/settings.json", "save", self.settings)
-
-    @blackjackset.command(name="paydaycredits", pass_context=True)
-    async def paydaycredits(self, credits : int):
-        """Credits earned each payday"""
-        self.settings["PAYDAY_CREDITS"] = credits
-        await self.bot.say("Every payday will now give " + str(credits) + " credits.")
-        fileIO("data/blackjack/settings.json", "save", self.settings)
-
     @blackjackset.command(name="decks", pass_context=True)
     async def decks(self, ctx, decks : int):
         """Number of decks in the shoe.
@@ -123,8 +113,8 @@ class Blackjack:
     async def _blackjack(self, ctx):
         """Play Blackjack!!
 
-        Step 1:  '!blackjack register' to open a blackjack account.
-        Step 2:  '!blackjack payday' will get you some credits!
+        Step 1:  '!bank register' to open a blackjack account.
+        Step 2:  '!payday' will get you some credits!
         Step 3:  '!sit' to start a game (or join an existing one).  
             3a:   Pick a seat [1-6] when you '!sit' or the dealer will pick for you.
         Step 4:   Place a 'bet' at the table and follow dealer instructions from there.  
@@ -156,103 +146,6 @@ class Blackjack:
         for sess in self.bj_sessions:
             channels.append(str(sess.channel))
 
-
-    @_blackjack.command(pass_context=True, no_pm=True)
-    async def register(self, ctx):
-        """Registers an account at the Blackjack tables.
-        """
-        user = ctx.message.author
-        if user.id not in self.bank:
-            self.bank[user.id] = {"name" : user.name, "balance" : 1000}
-            fileIO("data/blackjack/bank.json", "save", self.bank)
-            await self.bot.say("{} Blackjack account opened. Current balance: {}".format(user.mention, str(self.check_balance(user.id))))
-        else:
-            await self.bot.say("{} You already have an account at the Blackjack tables.".format(user.mention))
-
-    @_blackjack.command(pass_context=True)
-    async def balance(self, ctx, user : discord.Member=None):
-        """Shows balance of user.
-        Defaults to yours."""
-        if not user:
-            user = ctx.message.author
-            if self.account_check(user.id):
-                await self.bot.say("{} Your Blackjack table balance is: {}".format(user.mention, str(self.check_balance(user.id))))
-            else:
-                await self.bot.say("{} You don't have an account at the Blackjack tables. Type {}blackjack register to open one.".format(user.mention, ctx.prefix))
-        else:
-            if self.account_check(user.id):
-                balance = self.check_balance(user.id)
-                await self.bot.say("{}'s Blackjack table balance is {}".format(user.name, str(balance)))
-            else:
-                await self.bot.say("That user has no Blackjack table account yet.")
-
-    @_blackjack.command(pass_context=True, no_pm=True)
-    async def payday(self, ctx):
-        """Get some free blackjack table credits"""
-        author = ctx.message.author
-        id = author.id
-        if self.account_check(id):
-            if id in self.payday_register:
-                seconds = abs(self.payday_register[id] - int(time.perf_counter()))
-                if seconds  >= self.settings["PAYDAY_TIME"]:
-                    self.add_money(id, self.settings["PAYDAY_CREDITS"])
-                    self.payday_register[id] = int(time.perf_counter())
-                    await self.bot.say("{} Here, take some Blackjack table credits. Enjoy! (+{} credits!)".format(author.mention, str(self.settings["PAYDAY_CREDITS"])))
-                else:
-                    await self.bot.say("{} Too soon. For your next Blackjack payday, you have to wait {}.".format(author.mention, self.display_time(self.settings["PAYDAY_TIME"] - seconds)))
-            else:
-                self.payday_register[id] = int(time.perf_counter())
-                self.add_money(id, self.settings["PAYDAY_CREDITS"])
-                await self.bot.say("{} Here, take some credits. Enjoy! (+{} credits!)".format(author.mention, str(self.settings["PAYDAY_CREDITS"])))
-        else:
-            await self.bot.say("{} You need a blackjack account to receive credits. Type {}blackjack register to open one.".format(author.mention, ctx.prefix))
-
-    @_blackjack.command(pass_context=True)
-    async def transfer(self, ctx, user : discord.Member, sum : int):
-        """Transfer blackjack credits to other users"""
-        author = ctx.message.author
-        if author == user:
-            await self.bot.say("You can't transfer money to yourself.")
-            return
-        if sum < 1:
-            await self.bot.say("You need to transfer at least 1 credit.")
-            return
-        if self.account_check(user.id):
-            if self.enough_money(author.id, sum):
-                self.withdraw_money(author.id, sum)
-                self.add_money(user.id, sum)
-                logger.info("{}({}) transferred {} blackjack credits to {}({})".format(author.name, author.id, str(sum), user.name, user.id))
-                await self.bot.say("{} credits have been transferred to {}'s blackjack account.".format(str(sum), user.name))
-            else:
-                await self.bot.say("You don't have that sum in your blackjack account.")
-        else:
-            await self.bot.say("That user has no blackjack account.")
-
-    @_blackjack.command()
-    async def leaders(self, top : int=10):
-        """Prints the blackjack credit leaders!
-        Defaults to the Top Ten"""
-        if top < 1:
-            top = 10
-        bank_sorted = sorted(self.bank.items(), key=lambda x: x[1]["balance"], reverse=True)
-        if len(bank_sorted) < top:
-            top = len(bank_sorted)
-        topten = bank_sorted[:top]
-        highscore = ""
-        place = 1
-        for id in topten:
-            highscore += str(place).ljust(len(str(top))+1)
-            highscore += (id[1]["name"]+" ").ljust(23-len(str(id[1]["balance"])))
-            highscore += str(id[1]["balance"]) + "\n"
-            place += 1
-        if highscore:
-            if len(highscore) < 1985:
-                await self.bot.say("```py\n"+highscore+"```")
-            else:
-                await self.bot.say("That's too many blackjack leaders to be displayed. Try with a lower <top> parameter.")
-        else:
-            await self.bot.say("There are no accounts in the blackjack bank.")
-
     @commands.command(pass_context=True, no_pm=True)
     async def sit(self, ctx, seat : int=1):
         """Starts or joins the blackjack table!
@@ -261,8 +154,8 @@ class Blackjack:
         doneSeating = False
         message = ctx.message
         author = message.author
-        if not self.account_check(author.id):
-            await self.bot.say("{} You need an account to play blackjack. Type {}blackjack register to open one.".format(author.mention, ctx.prefix))
+        if not self.bank.account_exists(author):
+            await self.bot.say("{}, you need an account to play blackjack. Type {}bank register to open one.".format(author.mention, ctx.prefix))
             return
 
         if await get_bj_by_channel(message.channel):
@@ -315,72 +208,6 @@ class Blackjack:
         else:
             await self.bot.say("Sorry, but there's no blackjack table started, let alone one to stand up from.  Why don't you !sit down and start one.")
 
-    def account_check(self, id):
-        if id in self.bank:
-            return True
-        else:
-            return False
-
-    def check_balance(self, id):
-        if self.account_check(id):
-            return self.bank[id]["balance"]
-        else:
-            return False
-
-    def add_money(self, id, amount):
-        if self.account_check(id):
-            self.bank[id]["balance"] = self.bank[id]["balance"] + int(amount)
-            fileIO("data/blackjack/bank.json", "save", self.bank)
-        else:
-            return False
-
-    def withdraw_money(self, id, amount):
-        if self.account_check(id):
-            if self.bank[id]["balance"] >= int(amount):
-                self.bank[id]["balance"] = self.bank[id]["balance"] - int(amount)
-                fileIO("data/blackjack/bank.json", "save", self.bank)
-            else:
-                return False
-        else:
-            return False
-
-    def enough_money(self, id, amount):
-        if self.account_check(id):
-            if self.bank[id]["balance"] >= int(amount):
-                return True
-            else:
-                return False
-        else:
-            return False
-
-    def set_money(self, id, amount):
-        if self.account_check(id):
-            self.bank[id]["balance"] = amount
-            fileIO("data/blackjack/bank.json", "save", self.bank)
-            return True
-        else:
-            return False
-
-    def display_time(self, seconds, granularity=2): # What would I ever do without stackoverflow?
-        intervals = (                               # Source: http://stackoverflow.com/a/24542445
-            ('weeks', 604800),  # 60 * 60 * 24 * 7
-            ('days', 86400),    # 60 * 60 * 24
-            ('hours', 3600),    # 60 * 60
-            ('minutes', 60),
-            ('seconds', 1),
-            )
-
-        result = []
-
-        for name, count in intervals:
-            value = seconds // count
-            if value:
-                seconds -= value * count
-                if value == 1:
-                    name = name.rstrip('s')
-                result.append("{} {}".format(value, name))
-        return ', '.join(result[:granularity])
-
 
 class BlackjackSession():
     def __init__(self, message, settings):
@@ -398,6 +225,7 @@ class BlackjackSession():
         self.dbjcount = 0 #dealer blackjacks
         self.bets = {} #[player]bet
         self.lastbets = {} #[player]bet
+        self.startbal = {} #[player]balance
         self.hands = {} #[player][[Hands]]
         self.blackjacks = [] #[user]
         self.shoe = Shoe() #shoe of 1 Decks()
@@ -425,32 +253,34 @@ class BlackjackSession():
                     if com == "double":  self.status = "doubling"
                     if com == "surrender":  self.status = "surrendering"
                     return True
-        #add a "confused" status if more than one command present
+        #add a "confused" status if more than one command present?
 
     async def do_bet(self, message):
         """Establish a bet on the table"""
         author = message.author
         channel = message.channel
         
-        match = re.search(r'bet\D?(\d+)', message.content)
+        match = re.search(r'bet\D?(\d+)', message.content.lower())
         if match: 
             bet = int(match.group(1))
         else: 
-            if message.content == "bet" and author in self.lastbets.keys():
+            if message.content.lower() == "bet" and author in self.lastbets.keys():
                     bet = self.lastbets[author]  #repeat previous
             else:
                 return
         
-        if not bj_manager.account_check(author.id):
-            await bj_manager.bot.send_message(channel, "{} You need an account to play blackjack. Type {}blackjack register to open one.".format(author.mention, ctx.prefix))
+        if not bj_manager.bank.account_exists(author):
+            await bj_manager.bot.send_message(channel, "{} You need an account to play blackjack. Type {}bank register to open one.".format(author.mention, ctx.prefix))
             return
-        if bj_manager.enough_money(author.id, bet):
+        if bj_manager.bank.can_spend(author, bet):
             if bet >= self.settings["MIN_BET"] and bet <= self.settings["MAX_BET"]:
                 if self.status == "awaiting bets" or self.status == "active bets":  
                     self.status = "active bets"
-                    await bj_manager.bot.send_message(channel, "Bet {2} accepted, dealing soon.  {0}'s balance is: {1}".format(author.name, str(bj_manager.check_balance(author.id)), str(bet)))
+                    await bj_manager.bot.send_message(channel, "Bet {2} accepted, dealing soon.  {0}'s balance is: {1}".format(author.name, str(bj_manager.bank.get_balance(author)), str(bet)))
                     self.bets[author] = bet
                     self.betReady = True
+                    if author not in self.startbal:
+                        self.startbal[author] = bj_manager.bank.get_balance(author)
                 else:
                     await bj_manager.bot.send_message(channel, "Sorry, {}, but please wait until I'm accepting bets!".format(author.mention))
             else:
@@ -493,7 +323,7 @@ class BlackjackSession():
             await bj_manager.bot.say("BLACKJACK!  Congrats, {}.".format(self.activeUser.mention))  
             self.pbjcount += 1
             self.blackjacks.append(self.activeUser)
-            self.timer -= self.settings["ACTIVE_DELAY"] #unnecessary?
+            self.timer -= self.settings["ACTIVE_DELAY"] #unnecessary
             self.status = "blackjack"
         else:
             await bj_manager.bot.say("{}, you're up!  What action would you like to perform now?".format(self.activeUser.mention))
@@ -509,7 +339,7 @@ class BlackjackSession():
                     self.status = "dealing"
                 elif self.status == "doubling":
                     if len(self.hands[self.activeUser][splitindex]) == 2:
-                        if bj_manager.enough_money(self.activeUser.id, self.bets[self.activeUser]*2):
+                        if bj_manager.bank.can_spend(self.activeUser, self.bets[self.activeUser]*2):
                             self.hands[self.activeUser][splitindex].bet *= 2
                             await self.do_hit(splitindex)
                             self.timer -= self.settings["ACTIVE_DELAY"]
@@ -520,7 +350,7 @@ class BlackjackSession():
                     self.status = "dealing"
                 elif self.status == "splitting":
                     if self.hands[self.activeUser][splitindex].isSplittable():
-                        if bj_manager.enough_money(self.activeUser.id, self.hands[self.activeUser][splitindex].bet*2):
+                        if bj_manager.bank.can_spend(self.activeUser, self.hands[self.activeUser][splitindex].bet*2):
                             await self.do_split(splitindex)
                             return #escape this active_deal, do_split calls two new ones!
                         else:
@@ -583,8 +413,7 @@ class BlackjackSession():
                 if hand.bet > 0:
                     activehands += 1
         activehands -= len(self.blackjacks)
-        #should change how this blackjack thing is dealt with!!!
-        if activehands > 0:
+        if activehands >= 1:
             suspensetimer = int(time.perf_counter())
             while self.dealerhand.bjhighval < 21 and abs(suspensetimer - int(time.perf_counter())) <= 20:
                 await asyncio.sleep(2) #Waiting for suspense!
@@ -622,7 +451,8 @@ class BlackjackSession():
         self.count += 1 #hands played per session
         self.activeUser = None
         self.hands = {}
-        self.lastbets = self.bets
+        for player in self.bets:
+            self.lastbets[player] = self.bets[player]
         self.bets = {}
         self.blackjacks = []
         self.timer = int(time.perf_counter())
@@ -679,18 +509,34 @@ class BlackjackSession():
         """Finalize bets and adjust the blackjack bank!"""
         for player in self.hands:
             for hand in self.hands[player]: 
-                if hand.bet != 0:
-                    bj_manager.add_money(player.id, hand.bet)
-                await bj_manager.bot.say("{0}, your new blackjack balance is: {1}".format(player.mention, str(bj_manager.check_balance(player.id))))
+                if hand.bet > 0:
+                    bj_manager.bank.deposit_credits(player, hand.bet)
+                elif hand.bet < 0:
+                    bj_manager.bank.withdraw_credits(player, hand.bet * -1)
+                await bj_manager.bot.say("{0}, your new balance is: {1}".format(player.mention, str(bj_manager.bank.get_balance(player))))
         await self.reset_dealer()
 
     async def stop_bj(self):
-        output = "Blackjack ended.\nSession Stats:\nHands played: "
-        output += str(self.count)
-        output += "\nPlayer blackjacks:"
-        output += str(self.pbjcount)
-        output += "\nDealer blackjacks:"
-        output += str(self.dbjcount)
+        biggestwinner = "None"
+        biggestloser = "None"
+        biggestwinnings = 0
+        biggestlosses = 0
+        for player in self.startbal:
+            balance = bj_manager.bank.get_balance(player)
+            diff = balance - self.startbal[player]
+            if diff > 0 and diff > biggestwinnings:
+                biggestwinner = player.name
+                biggestwinnings = diff
+            if diff < 0 and diff < biggestlosses:
+                biggestloser = player.name
+                biggestlosses = diff 
+        output = "Blackjack ended.\nSession Stats:\nHands played: " + str(self.count)
+        output = output + "\nPlayer blackjacks:" + str(self.pbjcount)
+        output = output + "\nDealer blackjacks:" + str(self.dbjcount)
+        if biggestwinner != "None":
+            output = output + "\nBiggest Winner: " + biggestwinner + " winning " + str(biggestwinnings)
+        if biggestloser != "None":
+            output = output + "\nBiggest Loser: " + biggestloser + " losing " + str(biggestlosses)
         await bj_manager.bot.change_status(None)
         await bj_manager.bot.say(output)
         bj_manager.bj_sessions.remove(self)
@@ -709,15 +555,15 @@ async def check_messages(message):
 
 def check_folders():
     if not os.path.exists("data/blackjack"):
-        print("Creating data/blackjack folder...")
+        logger.info("Creating data/blackjack folder...")
         os.makedirs("data/blackjack")
 
 def check_files():
-    settings = {"ACTIVE_TIMEOUT" : 45, "MIN_BET" : 10, "MAX_BET" : 1000, "DECKS" : 1, "PAYDAY_CREDITS" : 1000, "PAYDAY_TIME" : 300, "ACTIVE_DELAY" : 20, "BET_TIMEOUT" : 10}
+    settings = {"ACTIVE_TIMEOUT" : 45, "MIN_BET" : 10, "MAX_BET" : 1000, "DECKS" : 1, "ACTIVE_DELAY" : 20, "BET_TIMEOUT" : 10}
 
     f = "data/blackjack/settings.json"
     if not fileIO(f, "check"):
-        print("Creating default blackjack settings.json...")
+        logger.info("Creating default blackjack's settings.json...")
         fileIO(f, "save", settings)
     else: #consistency check
         current = fileIO(f, "load")
@@ -725,13 +571,8 @@ def check_files():
             for key in settings.keys():
                 if key not in current.keys():
                     current[key] = settings[key]
-                    print("Adding " + str(key) + " field to blackjack settings.json")
+                    logger.info("Adding " + str(key) + " field to economy settings.json")
             fileIO(f, "save", current)
-
-    f = "data/blackjack/bank.json"
-    if not fileIO(f, "check"):
-        print("Creating empty blackjack bank.json...")
-        fileIO(f, "save", {})
 
 def setup(bot):
     global logger
@@ -770,7 +611,7 @@ class Card(object):
     """
 
     #suit and rank names specific to Discord emoji sets
-    #J Q K all default to 10s 
+    #had to get a little creative with JQK
     suit_names = [":clubs:", ":diamonds:", ":hearts:", ":spades:"]
     rank_names = [None, ":a:", ":two:", ":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:", ":nine:", ":ten:", ":baby_symbol:", ":womens:", ":mens:"]
 
