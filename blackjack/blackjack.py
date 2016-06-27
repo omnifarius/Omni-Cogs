@@ -534,9 +534,9 @@ class BlackjackSession():
         output = output + "\nPlayer blackjacks:" + str(self.pbjcount)
         output = output + "\nDealer blackjacks:" + str(self.dbjcount)
         if biggestwinner != "None":
-            output = output + "\nBiggest Winner: " + biggestwinner + " winning " + str(biggestwinnings)
+            output = output + "\nBiggest Winner: " + biggestwinner + " won " + str(biggestwinnings)
         if biggestloser != "None":
-            output = output + "\nBiggest Loser: " + biggestloser + " losing " + str(biggestlosses)
+            output = output + "\nBiggest Loser: " + biggestloser + " lost " + str(biggestlosses)
         await bj_manager.bot.change_status(None)
         await bj_manager.bot.say(output)
         bj_manager.bj_sessions.remove(self)
@@ -555,7 +555,7 @@ async def check_messages(message):
 
 def check_folders():
     if not os.path.exists("data/blackjack"):
-        logger.info("Creating data/blackjack folder...")
+        print("Creating data/blackjack folder...")
         os.makedirs("data/blackjack")
 
 def check_files():
@@ -563,7 +563,7 @@ def check_files():
 
     f = "data/blackjack/settings.json"
     if not fileIO(f, "check"):
-        logger.info("Creating default blackjack's settings.json...")
+        print("Creating default blackjack's settings.json...")
         fileIO(f, "save", settings)
     else: #consistency check
         current = fileIO(f, "load")
@@ -571,7 +571,7 @@ def check_files():
             for key in settings.keys():
                 if key not in current.keys():
                     current[key] = settings[key]
-                    logger.info("Adding " + str(key) + " field to economy settings.json")
+                    print("Adding " + str(key) + " field to economy settings.json")
             fileIO(f, "save", current)
 
 def setup(bot):
